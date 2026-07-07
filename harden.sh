@@ -7,6 +7,14 @@ LIB_DIR="${SCRIPT_DIR}/lib"
 MODULE_DIR="${SCRIPT_DIR}/modules"
 HARDENING_TIMESTAMP="${HARDENING_TIMESTAMP:-$(date +%Y%m%d-%H%M%S)}"
 
+_bootstrap_error() {
+  local line="$1"
+  local command="$2"
+  printf '[ERROR] Bootstrap failure on line %s: %s\n' "$line" "$command" >&2
+}
+
+trap '_bootstrap_error "$LINENO" "$BASH_COMMAND"' ERR
+
 ACTION="menu"
 SELECTED_MODULE=""
 CLI_PROFILE=""
@@ -36,6 +44,7 @@ Usage:
   sudo ./harden.sh --yes
   sudo ./harden.sh --initial-backup-only
   sudo ./harden.sh --no-initial-backup
+  sudo ./harden.sh --doctor
   sudo ./harden.sh --rollback
   sudo ./harden.sh --report-only
   sudo ./harden.sh --help
@@ -49,6 +58,7 @@ Options:
   --yes                   Auto-confirm prompts
   --initial-backup-only   Create the initial configuration backup and exit
   --no-initial-backup     Skip initial baseline backup for this run
+  --doctor                Run local diagnostics without changing the system
   --rollback              Restore files from a previous backup
   --report-only           Generate report only
   --debug                 Enable debug logs
@@ -102,6 +112,10 @@ parse_args() {
         ;;
       --no-initial-backup)
         RUN_INITIAL_BACKUP="false"
+        shift
+        ;;
+      --doctor)
+        ACTION="doctor"
         shift
         ;;
       --rollback)
@@ -171,6 +185,42 @@ load_modules() {
     # shellcheck source=/dev/null
     source "$module_file"
   done
+}
+
+doctor_check() {
+  local label="$1"
+  shift
+  if "$@" >/dev/null 2>&1; then
+    printf '[OK] %s\n' "$label"
+  else
+    printf '[WARN] %s\n' "$label"
+  fi
+}
+
+run_doctor() {
+  printf 'Debian 13 hardening doctor\n\n'
+  printf 'Script path: %s\n' "$SCRIPT_DIR/harden.sh"
+  printf 'Bash: %s\n' "${BASH_VERSION:-unknown}"
+  printf 'User: %s\n' "$(id -un 2>/dev/null || printf unknown)"
+  printf 'EUID: %s\n' "$EUID"
+  printf 'PWD: %s\n' "$(pwd)"
+  printf '\n'
+
+  doctor_check "harden.sh is readable" test -r "${SCRIPT_DIR}/harden.sh"
+  doctor_check "harden.sh is executable" test -x "${SCRIPT_DIR}/harden.sh"
+  doctor_check "config/hardening.conf is readable" test -r "${CONFIG_DIR}/hardening.conf"
+  doctor_check "config/profiles/balanced.conf is readable" test -r "${CONFIG_DIR}/profiles/balanced.conf"
+  doctor_check "lib directory is readable" test -d "$LIB_DIR"
+  doctor_check "modules directory is readable" test -d "$MODULE_DIR"
+  doctor_check "main is called at end of harden.sh" grep -q '^main "\$@"$' "${SCRIPT_DIR}/harden.sh"
+  doctor_check "bash syntax is valid" bash -n "${SCRIPT_DIR}/harden.sh"
+
+  printf '\nExpected runtime paths:\n'
+  printf -- '- Logs: %s\n' "${LOG_DIR:-/var/log/debian13-hardening}"
+  printf -- '- Backups: %s\n' "${BACKUP_ROOT:-/var/backups/debian13-hardening}"
+  printf '\nIf normal execution is silent, run:\n'
+  printf '  sudo bash -x ./harden.sh --help\n'
+  printf '  sudo bash -x ./harden.sh --dry-run --initial-backup-only\n'
 }
 
 run_module() {
@@ -278,6 +328,11 @@ main() {
   parse_args "$@"
   load_libraries
   load_configuration
+
+  if [[ "$ACTION" == "doctor" ]]; then
+    run_doctor
+    exit 0
+  fi
 
   require_root
   init_logging

@@ -21,6 +21,20 @@ sudo ./harden.sh --dry-run
 En mode `--dry-run`, aucun backup n'est cree dans `/var/backups`; le script
 affiche uniquement ce qui serait fait.
 
+## Diagnostic
+
+Si une execution semble ne rien faire, lancez:
+
+```bash
+./harden.sh --doctor
+sudo ./harden.sh --doctor
+sudo bash -x ./harden.sh --help
+```
+
+`--doctor` ne modifie pas le systeme. Il verifie le script execute, les chemins
+de configuration, l'appel final `main "$@"`, la syntaxe Bash et les chemins
+attendus pour les logs et backups.
+
 Pour SSH, gardez toujours une session ouverte et testez une seconde connexion
 avant de fermer votre terminal courant.
 
@@ -57,6 +71,7 @@ sudo ./harden.sh --dry-run
 sudo ./harden.sh --yes
 sudo ./harden.sh --initial-backup-only
 sudo ./harden.sh --no-initial-backup
+sudo ./harden.sh --doctor
 sudo ./harden.sh --rollback
 sudo ./harden.sh --report-only
 sudo ./harden.sh --help

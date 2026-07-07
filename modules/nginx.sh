@@ -25,18 +25,15 @@ run_nginx_hardening() {
     fi
   fi
 
-  local headers_snippet hardening_snippet global_conf tmp_headers tmp_hardening tmp_global
+  local headers_snippet hardening_snippet global_conf tmp_headers tmp_hardening tmp_global rollback_dir changed
   headers_snippet="/etc/nginx/snippets/security-headers.conf"
   hardening_snippet="/etc/nginx/snippets/hardening.conf"
   global_conf="/etc/nginx/conf.d/debian13-hardening.conf"
   tmp_headers="$(mktemp)"
   tmp_hardening="$(mktemp)"
   tmp_global="$(mktemp)"
-
-  backup_file /etc/nginx/nginx.conf
-  backup_file "$headers_snippet"
-  backup_file "$hardening_snippet"
-  backup_file "$global_conf"
+  rollback_dir="$(mktemp -d)"
+  changed="false"
 
   {
     printf '# Managed by debian13-web-hardening. Include inside server blocks.\n'
@@ -63,7 +60,6 @@ run_nginx_hardening() {
 
   {
     printf '# Managed by debian13-web-hardening. Loaded in nginx http context.\n'
-    printf 'server_tokens off;\n'
     printf 'client_max_body_size %s;\n' "${NGINX_CLIENT_MAX_BODY_SIZE:-10m}"
     printf 'client_body_timeout 15s;\n'
     printf 'client_header_timeout 15s;\n'
@@ -75,14 +71,35 @@ run_nginx_hardening() {
     printf 'add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;\n'
   } > "$tmp_global"
 
-  install_file_if_changed "$tmp_headers" "$headers_snippet" 0644
-  install_file_if_changed "$tmp_hardening" "$hardening_snippet" 0644
-  install_file_if_changed "$tmp_global" "$global_conf" 0644
+  if [[ -e "$headers_snippet" ]]; then cp -a "$headers_snippet" "${rollback_dir}/security-headers.conf"; fi
+  if [[ -e "$hardening_snippet" ]]; then cp -a "$hardening_snippet" "${rollback_dir}/hardening.conf"; fi
+  if [[ -e "$global_conf" ]]; then cp -a "$global_conf" "${rollback_dir}/debian13-hardening.conf"; fi
+
+  install_file_with_backup_if_changed "$tmp_headers" "$headers_snippet" 0644
+  [[ "$LAST_FILE_CHANGED" == "true" ]] && changed="true"
+  install_file_with_backup_if_changed "$tmp_hardening" "$hardening_snippet" 0644
+  [[ "$LAST_FILE_CHANGED" == "true" ]] && changed="true"
+  install_file_with_backup_if_changed "$tmp_global" "$global_conf" 0644
+  [[ "$LAST_FILE_CHANGED" == "true" ]] && changed="true"
 
   rm -f "$tmp_headers" "$tmp_hardening" "$tmp_global"
 
+  if [[ "$changed" != "true" ]]; then
+    log_success "Nginx hardening already configured; no reload needed"
+    rm -rf "$rollback_dir"
+    return 0
+  fi
+
   if [[ "${DRY_RUN:-false}" != "true" ]]; then
-    nginx -t
+    if ! nginx -t; then
+      log_error "Nginx configuration test failed; restoring previous Nginx hardening files"
+      if [[ -e "${rollback_dir}/security-headers.conf" ]]; then cp -a "${rollback_dir}/security-headers.conf" "$headers_snippet"; else rm -f "$headers_snippet"; fi
+      if [[ -e "${rollback_dir}/hardening.conf" ]]; then cp -a "${rollback_dir}/hardening.conf" "$hardening_snippet"; else rm -f "$hardening_snippet"; fi
+      if [[ -e "${rollback_dir}/debian13-hardening.conf" ]]; then cp -a "${rollback_dir}/debian13-hardening.conf" "$global_conf"; else rm -f "$global_conf"; fi
+      rm -rf "$rollback_dir"
+      report_add_recommendation "Nginx hardening files were restored because nginx -t failed."
+      return 1
+    fi
     log_success "Nginx configuration test passed"
     if service_is_active nginx; then
       run_cmd systemctl reload nginx
@@ -91,5 +108,6 @@ run_nginx_hardening() {
     fi
   fi
 
+  rm -rf "$rollback_dir"
   report_add_recommendation "For each Nginx server block, include snippets/security-headers.conf and snippets/hardening.conf after application testing."
 }

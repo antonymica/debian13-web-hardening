@@ -5,6 +5,8 @@ command_exists() {
   command -v "$1" >/dev/null 2>&1
 }
 
+LAST_FILE_CHANGED="false"
+
 is_true() {
   [[ "${1:-false}" == "true" || "${1:-false}" == "yes" || "${1:-false}" == "1" ]]
 }
@@ -45,12 +47,15 @@ install_file_if_changed() {
   local dest="$2"
   local mode="${3:-0644}"
   local owner="${4:-root:root}"
+  LAST_FILE_CHANGED="false"
 
   if [[ -f "$dest" ]] && cmp -s "$src" "$dest"; then
-    log_info "No changes needed for ${dest}"
+    log_success "Already configured: ${dest}"
+    report_add_already_configured "$dest"
     return 0
   fi
 
+  LAST_FILE_CHANGED="true"
   report_add_modified_file "$dest"
   if [[ "${DRY_RUN:-false}" == "true" ]]; then
     log_info "[dry-run] install ${src} -> ${dest}"
@@ -60,6 +65,23 @@ install_file_if_changed() {
   mkdir -p "$(dirname "$dest")"
   install -m "$mode" -o "${owner%%:*}" -g "${owner##*:}" "$src" "$dest"
   log_success "Updated ${dest}"
+}
+
+install_file_with_backup_if_changed() {
+  local src="$1"
+  local dest="$2"
+  local mode="${3:-0644}"
+  local owner="${4:-root:root}"
+
+  LAST_FILE_CHANGED="false"
+  if [[ -f "$dest" ]] && cmp -s "$src" "$dest"; then
+    log_success "Already configured: ${dest}"
+    report_add_already_configured "$dest"
+    return 0
+  fi
+
+  backup_file "$dest"
+  install_file_if_changed "$src" "$dest" "$mode" "$owner"
 }
 
 service_exists() {

@@ -15,6 +15,17 @@ un point de retour clair vers l'etat du serveur avant hardening.
 Le dossier est cree avec des permissions restrictives (`0700`) car il peut
 contenir des donnees sensibles, notamment dans `/etc/ssh`.
 
+Par defaut, le script reutilise le dernier baseline initial existant au lieu de
+creer un nouveau snapshot a chaque relance:
+
+```bash
+INITIAL_BACKUP_REUSE_LATEST=true
+```
+
+Cela evite de multiplier les backups lorsque la configuration est deja conforme.
+Passez cette valeur a `false` seulement si vous voulez volontairement recreer un
+baseline initial a chaque execution.
+
 ## Chemins sauvegardes par defaut
 
 - `/etc/ssh`

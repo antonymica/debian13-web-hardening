@@ -32,11 +32,13 @@ install_packages() {
   done
 
   if ((${#missing[@]} == 0)); then
+    report_add_already_configured "Packages already installed: $*"
     return 0
   fi
 
   apt_update_once
   log_info "Installing packages: ${missing[*]}"
+  report_mark_changed "Packages installed"
   run_cmd apt-get install -y "${missing[@]}"
 }
 
@@ -62,10 +64,12 @@ install_available_packages() {
   done
 
   if ((${#missing[@]} == 0)); then
+    report_add_already_configured "Available packages already installed or unavailable: $*"
     return 0
   fi
 
   log_info "Installing available packages: ${missing[*]}"
+  report_mark_changed "Packages installed"
   run_cmd apt-get install -y "${missing[@]}"
 }
 

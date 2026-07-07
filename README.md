@@ -141,15 +141,30 @@ Les logs sont ecrits dans:
 /var/log/debian13-hardening/hardening-YYYYMMDD-HHMMSS.log
 ```
 
-Un rapport Markdown est genere apres chaque execution:
+Par defaut, le rapport Markdown est mis a jour dans un fichier unique pour
+eviter d'empiler des rapports a chaque relance:
 
 ```text
-/var/log/debian13-hardening/reports/hardening-report-YYYYMMDD-HHMMSS.md
+/var/log/debian13-hardening/reports/hardening-report-latest.md
 ```
+
+Si vous voulez revenir a un rapport horodate par execution, mettez
+`REPORT_HISTORY_ENABLED=true` dans `config/hardening.conf`.
+
+Une page HTML stylisee est aussi publiee automatiquement dans le webroot Nginx
+par defaut:
+
+```text
+/var/www/html/hardening.html
+```
+
+Elle est remplacee a chaque execution et peut etre consultee depuis le serveur
+web si le vhost Nginx sert bien `/var/www/html`.
 
 Le rapport contient l'hote, la version Debian, le provider cloud detecte, les
 modules executes, les fichiers modifies, les backups, les regles firewall, les
-services desactives, les recommandations restantes et la commande de rollback.
+services desactives, les elements deja conformes, les actions de rollback, les
+recommandations restantes et la commande de rollback.
 
 ## Backups et rollback
 
@@ -159,6 +174,11 @@ gerees par le projet est cree automatiquement dans:
 ```text
 /var/backups/debian13-hardening/YYYYMMDD-HHMMSS/
 ```
+
+Par defaut, si un baseline initial existe deja, il est reutilise et aucun
+nouveau snapshot initial n'est cree. Cela evite de multiplier les backups lors
+des relances. Modifiez `INITIAL_BACKUP_REUSE_LATEST=false` pour forcer un
+nouveau baseline a chaque execution.
 
 Il contient notamment les configurations SSH, nftables, Fail2ban, sysctl, APT,
 Nginx, ModSecurity, auditd, AppArmor, systemd et services par defaut. Les
@@ -180,6 +200,9 @@ sudo ./harden.sh --rollback
 Le rollback restaure les fichiers depuis le manifeste du backup choisi. Il ne
 devine pas quels services doivent etre recharges apres restauration: verifiez
 les services affectes et relancez-les manuellement si necessaire.
+
+Apres un rollback, le script affiche un resume du nombre d'elements restaures,
+supprimes ou ignores, puis l'ajoute au rapport Markdown/HTML.
 
 ## Precautions SSH
 

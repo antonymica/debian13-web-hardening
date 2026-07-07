@@ -16,8 +16,9 @@ run_services_hardening() {
   log_info "Listing enabled services"
   systemctl list-unit-files --type=service --state=enabled || true
 
-  local is_gcp svc
+  local is_gcp svc disabled_count
   is_gcp="false"
+  disabled_count=0
   if detect_gcp; then
     is_gcp="true"
     log_warn "GCP detected: Google guest agents will not be disabled"
@@ -42,12 +43,19 @@ run_services_hardening() {
       continue
     fi
     if confirm "Disable service ${svc}?"; then
+      report_mark_changed "Service disabled"
       run_cmd systemctl disable --now "$svc"
       report_add_disabled_service "$svc"
+      ((disabled_count += 1))
       log_success "Disabled service ${svc}"
     else
       log_info "Skipped service ${svc}"
       report_add_recommendation "Review whether service ${svc} is required."
     fi
   done
+
+  if ((disabled_count == 0)); then
+    log_success "No unnecessary service was disabled; service state is already acceptable"
+    report_add_already_configured "No enabled unnecessary service required disabling"
+  fi
 }

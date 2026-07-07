@@ -10,8 +10,6 @@ run_kernel_hardening() {
   conf="/etc/sysctl.d/99-debian13-hardening.conf"
   tmp="$(mktemp)"
 
-  backup_file "$conf"
-
   {
     printf '# Managed by debian13-web-hardening.\n'
     printf '# BEGIN DEBIAN13-WEB-HARDENING\n'
@@ -44,6 +42,14 @@ run_kernel_hardening() {
     printf '# END DEBIAN13-WEB-HARDENING\n'
   } > "$tmp"
 
+  if [[ -f "$conf" ]] && cmp -s "$tmp" "$conf"; then
+    log_success "Kernel/sysctl hardening already configured; no sysctl reload needed"
+    report_add_already_configured "$conf"
+    rm -f "$tmp"
+    return 0
+  fi
+
+  backup_file "$conf"
   install_file_if_changed "$tmp" "$conf" 0644
   rm -f "$tmp"
 
@@ -52,4 +58,3 @@ run_kernel_hardening() {
   fi
   log_success "Kernel/sysctl hardening completed"
 }
-

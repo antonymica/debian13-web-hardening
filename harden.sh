@@ -26,6 +26,7 @@ RUN_INITIAL_BACKUP="true"
 ACTION_EXPLICIT="false"
 CLI_INSTALL_SECURITY_TOOLS="false"
 CLI_NO_INSTALL_PREREQS="false"
+PREFLIGHT_DONE="false"
 
 FIREWALL_EXTRA_TCP_PORTS=()
 FIREWALL_EXTRA_UDP_PORTS=()
@@ -316,6 +317,26 @@ run_all_recommended() {
   done
 }
 
+prepare_for_changes() {
+  if [[ "$PREFLIGHT_DONE" == "true" ]]; then
+    return 0
+  fi
+
+  if [[ "$RUN_INITIAL_BACKUP" == "true" ]]; then
+    initial_config_backup
+  else
+    log_warn "Initial configuration backup skipped by --no-initial-backup"
+    report_add_recommendation "Initial configuration backup was skipped by --no-initial-backup."
+  fi
+
+  install_launch_prerequisites
+  if [[ "${INSTALL_SECURITY_TOOLS_ON_START:-false}" == "true" ]]; then
+    install_security_tools_bundle
+  fi
+  warn_gcp_if_detected
+  PREFLIGHT_DONE="true"
+}
+
 show_menu() {
   local choice
   while true; do
@@ -341,19 +362,19 @@ Debian 13 Web Server Hardening
 EOF
     read -r -p "Select an option: " choice
     case "$choice" in
-      1) run_module ssh ;;
-      2) run_module firewall ;;
-      3) run_module fail2ban ;;
-      4) run_module kernel ;;
-      5) run_module services ;;
-      6) run_module updates ;;
-      7) run_module nginx ;;
-      8) run_module waf ;;
-      9) run_module auditd ;;
-      10) run_module apparmor ;;
-      11) run_module scanners ;;
-      12) install_security_tools_bundle ;;
-      13) run_all_recommended; break ;;
+      1) prepare_for_changes; run_module ssh ;;
+      2) prepare_for_changes; run_module firewall ;;
+      3) prepare_for_changes; run_module fail2ban ;;
+      4) prepare_for_changes; run_module kernel ;;
+      5) prepare_for_changes; run_module services ;;
+      6) prepare_for_changes; run_module updates ;;
+      7) prepare_for_changes; run_module nginx ;;
+      8) prepare_for_changes; run_module waf ;;
+      9) prepare_for_changes; run_module auditd ;;
+      10) prepare_for_changes; run_module apparmor ;;
+      11) prepare_for_changes; run_module scanners ;;
+      12) prepare_for_changes; install_security_tools_bundle ;;
+      13) prepare_for_changes; run_all_recommended; break ;;
       14) log_info "Report-only selected"; break ;;
       0) log_info "Exit selected"; break ;;
       *) log_warn "Invalid menu option: ${choice}" ;;
@@ -389,43 +410,26 @@ main() {
   load_modules
 
   case "$ACTION" in
-    menu|all|module|install-tools|initial-backup-only)
-      if [[ "$RUN_INITIAL_BACKUP" == "true" ]]; then
-        initial_config_backup
-      else
-        log_warn "Initial configuration backup skipped by --no-initial-backup"
-        report_add_recommendation "Initial configuration backup was skipped by --no-initial-backup."
-      fi
-      ;;
-  esac
-
-  case "$ACTION" in
-    menu|all|module|install-tools)
-      install_launch_prerequisites
-      if [[ "${INSTALL_SECURITY_TOOLS_ON_START:-false}" == "true" ]]; then
-        install_security_tools_bundle
-      fi
-      warn_gcp_if_detected
-      ;;
-  esac
-
-  case "$ACTION" in
     menu)
       show_menu
       ;;
     all)
+      prepare_for_changes
       run_all_recommended
       ;;
     module)
+      prepare_for_changes
       run_module "$SELECTED_MODULE"
       ;;
     rollback)
       rollback_interactive
       ;;
     install-tools)
+      prepare_for_changes
       log_info "Security tool installation only selected"
       ;;
     initial-backup-only)
+      initial_config_backup
       log_info "Initial backup only selected"
       ;;
     report-only)

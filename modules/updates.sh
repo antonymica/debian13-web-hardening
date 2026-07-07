@@ -17,7 +17,6 @@ run_updates_hardening() {
     report_add_recommendation "Automatic reboot is enabled; confirm maintenance windows and service availability."
   fi
 
-  backup_file "$conf"
   {
     printf '// Managed by debian13-web-hardening.\n'
     printf 'APT::Periodic::Update-Package-Lists "1";\n'
@@ -30,12 +29,20 @@ run_updates_hardening() {
     printf 'Unattended-Upgrade::Automatic-Reboot-Time "03:30";\n'
   } > "$tmp"
 
+  if [[ -f "$conf" ]] && cmp -s "$tmp" "$conf" && systemctl is-enabled --quiet unattended-upgrades 2>/dev/null; then
+    log_success "Unattended upgrades already configured"
+    report_add_already_configured "$conf"
+    rm -f "$tmp"
+    return 0
+  fi
+
+  backup_file "$conf"
   install_file_if_changed "$tmp" "$conf" 0644
   rm -f "$tmp"
 
   if [[ "${DRY_RUN:-false}" != "true" ]]; then
+    report_mark_changed "Unattended upgrades service configured"
     run_cmd systemctl enable --now unattended-upgrades
   fi
   log_success "Unattended upgrades configured"
 }
-

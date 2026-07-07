@@ -15,9 +15,6 @@ run_apache_hardening() {
   conf="/etc/apache2/conf-available/debian13-hardening.conf"
   tmp="$(mktemp)"
 
-  backup_file /etc/apache2/apache2.conf
-  backup_file "$conf"
-
   {
     printf '# Managed by debian13-web-hardening.\n'
     printf 'ServerTokens %s\n' "${APACHE_SERVER_TOKENS:-Prod}"
@@ -38,6 +35,15 @@ run_apache_hardening() {
     printf '</DirectoryMatch>\n'
   } > "$tmp"
 
+  if [[ -f "$conf" ]] && cmp -s "$tmp" "$conf"; then
+    log_success "Apache hardening already configured"
+    report_add_already_configured "$conf"
+    rm -f "$tmp"
+    return 0
+  fi
+
+  backup_file /etc/apache2/apache2.conf
+  backup_file "$conf"
   install_file_if_changed "$tmp" "$conf" 0644
   rm -f "$tmp"
 

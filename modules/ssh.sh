@@ -58,13 +58,6 @@ run_ssh_hardening() {
       ;;
   esac
 
-  backup_file /etc/ssh/sshd_config
-  if [[ -e "$dropin" ]]; then
-    existed="true"
-    cp -a "$dropin" "$previous"
-    backup_file "$dropin"
-  fi
-
   {
     printf '# Managed by debian13-web-hardening. Do not edit manually.\n'
     printf '# BEGIN DEBIAN13-WEB-HARDENING\n'
@@ -89,6 +82,21 @@ run_ssh_hardening() {
     printf '# Protocol 2 is implicit in modern OpenSSH and is not set to avoid unsupported directives.\n'
     printf '# END DEBIAN13-WEB-HARDENING\n'
   } > "$tmp"
+
+  if [[ -f "$dropin" ]] && cmp -s "$tmp" "$dropin"; then
+    log_success "SSH hardening already configured; no SSH reload needed"
+    report_add_already_configured "$dropin"
+    report_add_firewall_rule "Keep SSH allowed on detected port ${ssh_port}"
+    rm -f "$tmp" "$previous"
+    return 0
+  fi
+
+  backup_file /etc/ssh/sshd_config
+  if [[ -e "$dropin" ]]; then
+    existed="true"
+    cp -a "$dropin" "$previous"
+    backup_file "$dropin"
+  fi
 
   install_file_if_changed "$tmp" "$dropin" 0644
 
@@ -124,4 +132,3 @@ run_ssh_hardening() {
   report_add_recommendation "Open a second SSH session and verify login before closing the current session."
   rm -f "$tmp" "$previous"
 }
-

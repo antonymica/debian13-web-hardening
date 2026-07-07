@@ -7,14 +7,23 @@ BACKUP_MANIFEST="${BACKUP_MANIFEST:-${BACKUP_DIR}/backup-manifest.txt}"
 INITIAL_BACKUP_DIR="${INITIAL_BACKUP_DIR:-${BACKUP_DIR}/initial-config}"
 INITIAL_BACKUP_MANIFEST="${INITIAL_BACKUP_MANIFEST:-${INITIAL_BACKUP_DIR}/initial-config-manifest.txt}"
 MISSING_BACKUP_MARKER="__DEBIAN13_HARDENING_MISSING__"
+BACKUP_DIR_READY="${BACKUP_DIR_READY:-false}"
 
 init_backup() {
+  log_debug "Backup directory reserved: ${BACKUP_DIR}"
+  report_add_rollback_command "sudo ./harden.sh --rollback"
+}
+
+ensure_backup_dir_ready() {
+  if [[ "$BACKUP_DIR_READY" == "true" ]]; then
+    return 0
+  fi
   ensure_dir "$BACKUP_DIR" 0700
   if [[ "${DRY_RUN:-false}" != "true" ]]; then
     touch "$BACKUP_MANIFEST"
     chmod 0600 "$BACKUP_MANIFEST"
   fi
-  report_add_rollback_command "sudo ./harden.sh --rollback"
+  BACKUP_DIR_READY="true"
 }
 
 record_missing_path() {
@@ -23,6 +32,7 @@ record_missing_path() {
     log_info "[dry-run] record initially missing path ${path}"
     return 0
   fi
+  ensure_backup_dir_ready
   printf '%s|%s\n' "$path" "$MISSING_BACKUP_MARKER" >> "$BACKUP_MANIFEST"
 }
 
@@ -45,11 +55,23 @@ backup_file() {
     return 0
   fi
 
+  ensure_backup_dir_ready
   mkdir -p "$backup_parent"
   cp -a "$path" "$backup_path"
   printf '%s|%s\n' "$path" "$backup_path" >> "$BACKUP_MANIFEST"
   log_backup "${path} saved to ${backup_path}"
   report_add_backup "${path} -> ${backup_path}"
+}
+
+latest_initial_backup_dir() {
+  local dir
+  while IFS= read -r dir; do
+    if [[ -r "${dir}/initial-config/initial-config-manifest.txt" ]]; then
+      printf '%s\n' "${dir}/initial-config"
+      return 0
+    fi
+  done < <(find "$BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort -r)
+  return 1
 }
 
 initial_config_backup() {
@@ -61,6 +83,15 @@ initial_config_backup() {
 
   log_section "Initial configuration backup"
 
+  local previous_initial
+  previous_initial="$(latest_initial_backup_dir || true)"
+  if [[ "${INITIAL_BACKUP_REUSE_LATEST:-true}" == "true" && -n "$previous_initial" ]]; then
+    log_success "Initial baseline backup already exists: ${previous_initial}"
+    report_add_already_configured "Initial baseline backup already exists: ${previous_initial}"
+    report_add_rollback_command "sudo ./harden.sh --rollback # latest baseline: ${previous_initial}"
+    return 0
+  fi
+
   if [[ "${DRY_RUN:-false}" == "true" ]]; then
     log_info "[dry-run] initial backup would be created under ${INITIAL_BACKUP_DIR}"
     log_info "[dry-run] dry-run mode does not create /var/backups entries"
@@ -71,6 +102,7 @@ initial_config_backup() {
     return 0
   fi
 
+  ensure_backup_dir_ready
   mkdir -p "${INITIAL_BACKUP_DIR}/filesystem"
   chmod 0700 "$INITIAL_BACKUP_DIR" "${INITIAL_BACKUP_DIR}/filesystem"
   touch "$INITIAL_BACKUP_MANIFEST"

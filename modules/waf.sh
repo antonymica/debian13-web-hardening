@@ -33,7 +33,6 @@ run_waf_hardening() {
   install_package_if_available modsecurity-crs || true
   conf="/etc/modsecurity/debian13-hardening.conf"
   tmp="$(mktemp)"
-  backup_file "$conf"
 
   {
     printf '# Managed by debian13-web-hardening.\n'
@@ -44,7 +43,7 @@ run_waf_hardening() {
     printf 'SecResponseBodyAccess Off\n'
   } > "$tmp"
 
-  install_file_if_changed "$tmp" "$conf" 0644
+  install_file_with_backup_if_changed "$tmp" "$conf" 0644
   rm -f "$tmp"
 
   if [[ "$apache_present" == "true" ]]; then
@@ -66,13 +65,12 @@ run_waf_hardening() {
       local nginx_snippet nginx_tmp
       nginx_snippet="/etc/nginx/snippets/modsecurity.conf"
       nginx_tmp="$(mktemp)"
-      backup_file "$nginx_snippet"
       {
         printf '# Managed by debian13-web-hardening. Include inside server blocks after testing.\n'
         printf 'modsecurity on;\n'
         printf 'modsecurity_rules_file %s;\n' "$conf"
       } > "$nginx_tmp"
-      install_file_if_changed "$nginx_tmp" "$nginx_snippet" 0644
+      install_file_with_backup_if_changed "$nginx_tmp" "$nginx_snippet" 0644
       rm -f "$nginx_tmp"
       report_add_recommendation "Include snippets/modsecurity.conf in tested Nginx server blocks to enable WAF protection."
     fi

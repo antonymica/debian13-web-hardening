@@ -13,8 +13,6 @@ run_fail2ban_hardening() {
   tmp="$(mktemp)"
   ssh_port="$(detect_ssh_port)"
 
-  backup_file "$jail"
-
   {
     printf '# Managed by debian13-web-hardening.\n'
     printf '[DEFAULT]\n'
@@ -43,6 +41,14 @@ run_fail2ban_hardening() {
     fi
   } > "$tmp"
 
+  if [[ -f "$jail" ]] && cmp -s "$tmp" "$jail" && service_is_active fail2ban; then
+    log_success "Fail2ban hardening already configured and service is active"
+    report_add_already_configured "$jail"
+    rm -f "$tmp"
+    return 0
+  fi
+
+  backup_file "$jail"
   install_file_if_changed "$tmp" "$jail" 0644
   rm -f "$tmp"
 
@@ -53,7 +59,14 @@ run_fail2ban_hardening() {
 
   fail2ban-client -t
   log_success "Fail2ban configuration test passed"
+  report_mark_changed "Fail2ban service configured"
+  run_cmd systemctl enable --now fail2ban
   run_cmd systemctl restart fail2ban
-  fail2ban-client status || true
+  if fail2ban-client status; then
+    log_success "Fail2ban service is reachable"
+  else
+    log_warn "Fail2ban configuration is valid, but fail2ban-client could not reach the service socket"
+    report_add_recommendation "Check Fail2ban service status: systemctl status fail2ban"
+  fi
   log_success "Fail2ban hardening completed"
 }

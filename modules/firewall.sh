@@ -24,8 +24,6 @@ run_firewall_hardening() {
     [[ -n "$port" ]] && udp_ports+=("$port")
   done
 
-  backup_file /etc/nftables.conf
-
   {
     printf '#!/usr/sbin/nft -f\n'
     printf '# Managed by debian13-web-hardening.\n\n'
@@ -59,6 +57,20 @@ run_firewall_hardening() {
     printf '}\n'
   } > "$tmp"
 
+  if [[ -f /etc/nftables.conf ]] && cmp -s "$tmp" /etc/nftables.conf \
+    && systemctl is-enabled --quiet nftables 2>/dev/null \
+    && service_is_active nftables; then
+    log_success "nftables firewall already configured and active"
+    report_add_already_configured "/etc/nftables.conf"
+    report_add_firewall_rule "Default deny inbound traffic"
+    report_add_firewall_rule "Allow SSH on TCP port ${ssh_port}"
+    if is_true "${FIREWALL_ALLOW_WEB:-true}" || is_true "${WEB_SERVER_MODE:-true}"; then
+      report_add_firewall_rule "Allow HTTP/HTTPS on TCP ports 80 and 443"
+    fi
+    rm -f "$tmp"
+    return 0
+  fi
+
   if [[ "${DRY_RUN:-false}" != "true" ]]; then
     nft -c -f "$tmp"
     log_success "nftables configuration test passed"
@@ -66,9 +78,11 @@ run_firewall_hardening() {
     log_info "[dry-run] nft -c -f ${tmp}"
   fi
 
+  backup_file /etc/nftables.conf
   install_file_if_changed "$tmp" /etc/nftables.conf 0755
 
   if [[ "${DRY_RUN:-false}" != "true" ]]; then
+    report_mark_changed "Firewall rules applied"
     run_cmd nft -f /etc/nftables.conf
     run_cmd systemctl enable --now nftables
   fi

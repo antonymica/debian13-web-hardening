@@ -65,6 +65,61 @@ detect_ssh_port() {
   printf '%s' "${port:-22}"
 }
 
+validate_tcp_port() {
+  local port="$1"
+  [[ "$port" =~ ^[0-9]+$ ]] && ((port >= 1 && port <= 65535))
+}
+
+resolve_ssh_target_port() {
+  local current configured
+  current="$(detect_ssh_port)"
+  configured="${SSH_PORT:-auto}"
+  case "$configured" in
+    ""|auto|current)
+      printf '%s\n' "$current"
+      ;;
+    *)
+      if validate_tcp_port "$configured"; then
+        printf '%s\n' "$configured"
+      else
+        log_error "Invalid SSH_PORT=${configured}. Use auto/current or a TCP port between 1 and 65535."
+        return 1
+      fi
+      ;;
+  esac
+}
+
+effective_ssh_ports() {
+  local current target port existing
+  local ports=()
+  current="$(detect_ssh_port)"
+  target="$(resolve_ssh_target_port)"
+
+  if [[ "$target" != "$current" && "${SSH_KEEP_CURRENT_PORT_ON_CHANGE:-true}" == "true" ]]; then
+    ports+=("$current")
+  fi
+  ports+=("$target")
+
+  for port in "${SSH_ADDITIONAL_PORTS[@]+"${SSH_ADDITIONAL_PORTS[@]}"}"; do
+    [[ -n "$port" ]] || continue
+    if ! validate_tcp_port "$port"; then
+      log_error "Invalid SSH additional port: ${port}"
+      return 1
+    fi
+    ports+=("$port")
+  done
+
+  local unique=()
+  for port in "${ports[@]}"; do
+    for existing in "${unique[@]+"${unique[@]}"}"; do
+      [[ "$existing" == "$port" ]] && continue 2
+    done
+    unique+=("$port")
+  done
+
+  printf '%s\n' "${unique[@]}"
+}
+
 detect_admin_user() {
   if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
     printf '%s' "$SUDO_USER"
@@ -102,4 +157,3 @@ warn_gcp_if_detected() {
     report_add_recommendation "On GCP, verify VPC firewall rules and OS Login/SSH key policy outside the host firewall."
   fi
 }
-

@@ -9,15 +9,26 @@ run_ssh_hardening() {
 
   install_packages openssh-server
 
-  local ssh_port admin_user key_detected password_setting dropin tmp previous existed
-  ssh_port="$(detect_ssh_port)"
+  local current_ssh_port target_ssh_port admin_user key_detected password_setting dropin tmp previous existed port
+  local ssh_ports=()
+  current_ssh_port="$(detect_ssh_port)"
+  target_ssh_port="$(resolve_ssh_target_port)"
+  while IFS= read -r port; do
+    [[ -n "$port" ]] && ssh_ports+=("$port")
+  done < <(effective_ssh_ports)
   admin_user="$(detect_admin_user)"
   dropin="/etc/ssh/sshd_config.d/90-debian13-hardening.conf"
   tmp="$(mktemp)"
   previous="$(mktemp)"
   existed="false"
 
-  log_info "Detected SSH port: ${ssh_port}"
+  log_info "Detected current SSH port: ${current_ssh_port}"
+  log_info "Target SSH port: ${target_ssh_port}"
+  log_info "SSH will listen on port(s): ${ssh_ports[*]}"
+  if [[ "$target_ssh_port" != "$current_ssh_port" && "${SSH_KEEP_CURRENT_PORT_ON_CHANGE:-true}" == "true" ]]; then
+    log_warn "SSH port change requested; keeping current port ${current_ssh_port} enabled during transition"
+    report_add_recommendation "After confirming SSH login on port ${target_ssh_port}, set SSH_KEEP_CURRENT_PORT_ON_CHANGE=false to remove the old port ${current_ssh_port}."
+  fi
   if active_ssh_session_detected; then
     log_info "Active SSH session detected"
   else
@@ -61,6 +72,9 @@ run_ssh_hardening() {
   {
     printf '# Managed by debian13-web-hardening. Do not edit manually.\n'
     printf '# BEGIN DEBIAN13-WEB-HARDENING\n'
+    for port in "${ssh_ports[@]}"; do
+      printf 'Port %s\n' "$port"
+    done
     printf 'PermitRootLogin no\n'
     printf 'PubkeyAuthentication yes\n'
     if [[ -n "$password_setting" ]]; then
@@ -86,7 +100,9 @@ run_ssh_hardening() {
   if [[ -f "$dropin" ]] && cmp -s "$tmp" "$dropin"; then
     log_success "SSH hardening already configured; no SSH reload needed"
     report_add_already_configured "$dropin"
-    report_add_firewall_rule "Keep SSH allowed on detected port ${ssh_port}"
+    for port in "${ssh_ports[@]}"; do
+      report_add_firewall_rule "Keep SSH allowed on TCP port ${port}"
+    done
     rm -f "$tmp" "$previous"
     return 0
   fi
@@ -128,7 +144,9 @@ run_ssh_hardening() {
     report_add_recommendation "Reload SSH manually after verifying service name: systemctl reload ssh"
   fi
 
-  report_add_firewall_rule "Keep SSH allowed on detected port ${ssh_port}"
+  for port in "${ssh_ports[@]}"; do
+    report_add_firewall_rule "Keep SSH allowed on TCP port ${port}"
+  done
   report_add_recommendation "Open a second SSH session and verify login before closing the current session."
   rm -f "$tmp" "$previous"
 }

@@ -8,6 +8,7 @@
 ## Controles appliques
 
 - `PermitRootLogin no`
+- `Port <current>` ou `Port <configured>` selon la configuration
 - `PubkeyAuthentication yes`
 - `PasswordAuthentication no` seulement si une cle publique valide est detectee
 - `KbdInteractiveAuthentication no`
@@ -28,6 +29,38 @@ que SSH protocol 2 et cette directive peut etre absente ou obsolette.
 Le module detecte le port SSH courant, une session SSH active, l'utilisateur
 admin et la presence d'une cle dans `authorized_keys`. Si aucune cle valide
 n'est detectee, il laisse l'authentification par mot de passe inchangee.
+
+## Changer le port SSH
+
+Par defaut:
+
+```bash
+SSH_PORT=auto
+SSH_KEEP_CURRENT_PORT_ON_CHANGE=true
+```
+
+Pour ajouter un nouveau port sans couper l'ancien:
+
+```bash
+sudo ./harden.sh --ssh-port 2222 --module ssh
+sudo ./harden.sh --ssh-port 2222 --module firewall
+```
+
+Le service SSH ecoutera alors sur le port actuel et sur `2222`. Testez:
+
+```bash
+ssh -p 2222 user@server
+```
+
+Apres validation, retirez l'ancien port:
+
+```bash
+sudo ./harden.sh --ssh-port 2222 --replace-ssh-port --module ssh
+sudo ./harden.sh --ssh-port 2222 --replace-ssh-port --module firewall
+```
+
+Sur GCP, ajoutez aussi une regle VPC autorisant le nouveau port avant de fermer
+la session existante.
 
 La configuration est testee avec:
 
@@ -59,4 +92,3 @@ sudo ./harden.sh --rollback
 sshd -t
 sudo systemctl reload ssh
 ```
-

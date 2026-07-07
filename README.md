@@ -63,6 +63,8 @@ sudo ./harden.sh
 sudo ./harden.sh --menu
 sudo ./harden.sh --all
 sudo ./harden.sh --module ssh
+sudo ./harden.sh --ssh-port 2222 --module ssh
+sudo ./harden.sh --ssh-port 2222 --replace-ssh-port --module ssh
 sudo ./harden.sh --module firewall
 sudo ./harden.sh --profile conservative
 sudo ./harden.sh --profile balanced
@@ -236,6 +238,8 @@ supprimes ou ignores, puis l'ajoute au rapport Markdown/HTML.
 Le module SSH:
 
 - detecte le port SSH courant;
+- permet de configurer un nouveau port SSH;
+- garde l'ancien port ouvert par defaut pendant un changement de port;
 - detecte une session SSH active;
 - cherche une cle publique valide dans `authorized_keys` pour l'utilisateur admin;
 - ne desactive pas `PasswordAuthentication` si aucune cle valide n'est detectee;
@@ -246,6 +250,26 @@ Le module SSH:
 Sur GCP, OS Login et les cles SSH peuvent etre geres par la plateforme. Le
 module affiche donc un avertissement et laisse l'authentification par mot de
 passe intacte si aucune cle locale n'est detectee.
+
+Pour changer le port SSH prudemment:
+
+```bash
+sudo ./harden.sh --ssh-port 2222 --module ssh
+sudo ./harden.sh --ssh-port 2222 --module firewall
+ssh -p 2222 votre-utilisateur@votre-serveur
+```
+
+Par defaut, l'ancien port reste actif pendant cette transition
+(`SSH_KEEP_CURRENT_PORT_ON_CHANGE=true`). Une fois la connexion testee sur le
+nouveau port, vous pouvez retirer l'ancien port:
+
+```bash
+sudo ./harden.sh --ssh-port 2222 --replace-ssh-port --module ssh
+sudo ./harden.sh --ssh-port 2222 --replace-ssh-port --module firewall
+```
+
+Sur GCP, ouvrez aussi le nouveau port dans les regles firewall VPC avant de
+fermer votre session SSH existante.
 
 ## Notes GCP
 

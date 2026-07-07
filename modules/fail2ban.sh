@@ -8,10 +8,14 @@ run_fail2ban_hardening() {
 
   install_packages fail2ban
 
-  local jail tmp ssh_port
+  local jail tmp ssh_ports_expr port
+  local ssh_ports=()
   jail="/etc/fail2ban/jail.d/debian13-hardening.local"
   tmp="$(mktemp)"
-  ssh_port="$(detect_ssh_port)"
+  while IFS= read -r port; do
+    [[ -n "$port" ]] && ssh_ports+=("$port")
+  done < <(effective_ssh_ports)
+  ssh_ports_expr="$(join_by_comma "${ssh_ports[@]}")"
 
   {
     printf '# Managed by debian13-web-hardening.\n'
@@ -23,7 +27,7 @@ run_fail2ban_hardening() {
     printf 'ignoreip = %s\n\n' "${FAIL2BAN_IGNOREIP:-127.0.0.1/8 ::1}"
     printf '[sshd]\n'
     printf 'enabled = true\n'
-    printf 'port = %s\n' "$ssh_port"
+    printf 'port = %s\n' "$ssh_ports_expr"
     printf 'backend = systemd\n\n'
     if [[ -d /etc/nginx && -f /var/log/nginx/error.log ]]; then
       printf '[nginx-http-auth]\n'

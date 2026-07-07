@@ -26,6 +26,8 @@ RUN_INITIAL_BACKUP="true"
 ACTION_EXPLICIT="false"
 CLI_INSTALL_SECURITY_TOOLS="false"
 CLI_NO_INSTALL_PREREQS="false"
+CLI_SSH_PORT=""
+CLI_REPLACE_SSH_PORT="false"
 PREFLIGHT_DONE="false"
 
 FIREWALL_EXTRA_TCP_PORTS=()
@@ -40,6 +42,8 @@ Usage:
   sudo ./harden.sh --menu
   sudo ./harden.sh --all
   sudo ./harden.sh --module ssh
+  sudo ./harden.sh --ssh-port 2222 --module ssh
+  sudo ./harden.sh --ssh-port 2222 --replace-ssh-port --module ssh
   sudo ./harden.sh --module firewall
   sudo ./harden.sh --profile conservative
   sudo ./harden.sh --profile balanced
@@ -59,6 +63,8 @@ Options:
   --menu                  Show interactive menu (default)
   --all                   Run all recommended hardening modules
   --module <name>         Run one module
+  --ssh-port <port>       Configure SSH to listen on this TCP port
+  --replace-ssh-port      Do not keep the current SSH port during port change
   --profile <name>        Use conservative, balanced, or strict profile
   --dry-run               Show actions without applying changes
   --yes                   Auto-confirm prompts
@@ -108,6 +114,18 @@ parse_args() {
         fi
         CLI_PROFILE="$2"
         shift 2
+        ;;
+      --ssh-port)
+        if [[ -z "${2:-}" ]]; then
+          printf 'Missing value for --ssh-port\n' >&2
+          exit 2
+        fi
+        CLI_SSH_PORT="$2"
+        shift 2
+        ;;
+      --replace-ssh-port)
+        CLI_REPLACE_SSH_PORT="true"
+        shift
         ;;
       --dry-run)
         DRY_RUN="true"
@@ -209,6 +227,12 @@ load_configuration() {
   fi
   if [[ "$CLI_NO_INSTALL_PREREQS" == "true" ]]; then
     AUTO_INSTALL_PREREQUISITES="false"
+  fi
+  if [[ -n "$CLI_SSH_PORT" ]]; then
+    SSH_PORT="$CLI_SSH_PORT"
+  fi
+  if [[ "$CLI_REPLACE_SSH_PORT" == "true" ]]; then
+    SSH_KEEP_CURRENT_PORT_ON_CHANGE="false"
   fi
 }
 

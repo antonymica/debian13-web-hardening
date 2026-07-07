@@ -11,11 +11,15 @@ run_firewall_hardening() {
 
   install_packages nftables
 
-  local ssh_port tmp tcp_ports udp_ports port
-  ssh_port="$(detect_ssh_port)"
+  local tmp tcp_ports udp_ports port ssh_ports_expr
+  local ssh_ports=()
   tmp="$(mktemp)"
   tcp_ports=()
   udp_ports=()
+  while IFS= read -r port; do
+    [[ -n "$port" ]] && ssh_ports+=("$port")
+  done < <(effective_ssh_ports)
+  ssh_ports_expr="$(join_by_comma "${ssh_ports[@]}")"
 
   for port in "${FIREWALL_EXTRA_TCP_PORTS[@]+"${FIREWALL_EXTRA_TCP_PORTS[@]}"}"; do
     [[ -n "$port" ]] && tcp_ports+=("$port")
@@ -36,7 +40,11 @@ run_firewall_hardening() {
     printf '    ct state invalid drop\n'
     printf '    ip protocol icmp accept\n'
     printf '    ip6 nexthdr icmpv6 accept\n'
-    printf '    tcp dport %s accept\n' "$ssh_port"
+    if ((${#ssh_ports[@]} == 1)); then
+      printf '    tcp dport %s accept\n' "${ssh_ports[0]}"
+    else
+      printf '    tcp dport { %s } accept\n' "$ssh_ports_expr"
+    fi
     if is_true "${FIREWALL_ALLOW_WEB:-true}" || is_true "${WEB_SERVER_MODE:-true}"; then
       printf '    tcp dport { 80, 443 } accept\n'
     fi
@@ -63,7 +71,7 @@ run_firewall_hardening() {
     log_success "nftables firewall already configured and active"
     report_add_already_configured "/etc/nftables.conf"
     report_add_firewall_rule "Default deny inbound traffic"
-    report_add_firewall_rule "Allow SSH on TCP port ${ssh_port}"
+    report_add_firewall_rule "Allow SSH on TCP port(s): ${ssh_ports_expr}"
     if is_true "${FIREWALL_ALLOW_WEB:-true}" || is_true "${WEB_SERVER_MODE:-true}"; then
       report_add_firewall_rule "Allow HTTP/HTTPS on TCP ports 80 and 443"
     fi
@@ -91,7 +99,7 @@ run_firewall_hardening() {
   report_add_firewall_rule "Allow loopback traffic"
   report_add_firewall_rule "Allow established and related traffic"
   report_add_firewall_rule "Allow ICMP and ICMPv6"
-  report_add_firewall_rule "Allow SSH on TCP port ${ssh_port}"
+  report_add_firewall_rule "Allow SSH on TCP port(s): ${ssh_ports_expr}"
   if is_true "${FIREWALL_ALLOW_WEB:-true}" || is_true "${WEB_SERVER_MODE:-true}"; then
     report_add_firewall_rule "Allow HTTP/HTTPS on TCP ports 80 and 443"
   fi

@@ -69,6 +69,8 @@ sudo ./harden.sh --profile balanced
 sudo ./harden.sh --profile strict
 sudo ./harden.sh --dry-run
 sudo ./harden.sh --yes
+sudo ./harden.sh --install-tools
+sudo ./harden.sh --no-install-prereqs
 sudo ./harden.sh --initial-backup-only
 sudo ./harden.sh --no-initial-backup
 sudo ./harden.sh --doctor
@@ -81,6 +83,7 @@ Les options peuvent etre combinees, par exemple:
 
 ```bash
 sudo ./harden.sh --profile strict --all --yes
+sudo ./harden.sh --install-tools --module nginx
 ```
 
 ## Modules
@@ -96,6 +99,39 @@ sudo ./harden.sh --profile strict --all --yes
 - `auditd`: surveillance des fichiers et commandes sensibles.
 - `apparmor`: installation et activation sans forcer tous les profils.
 - `scanners`: lynis, rkhunter, chkrootkit, debsums, nmap local.
+
+## Installation des outils
+
+Au lancement des actions principales (`--menu`, `--all`, `--module`), le script
+verifie et installe automatiquement les prerequis de base quand
+`AUTO_INSTALL_PREREQUISITES=true`:
+
+- `ca-certificates`
+- `curl`
+- `gnupg`
+- `lsb-release`
+- `apt-transport-https`
+- `debian-archive-keyring`
+- `procps`
+- `iproute2`
+- `sudo`
+
+Pour installer le bundle complet d'outils de securite sans appliquer tous les
+modules:
+
+```bash
+sudo ./harden.sh --install-tools
+```
+
+Ce bundle inclut notamment OpenSSH server, nftables, Fail2ban,
+unattended-upgrades, auditd, AppArmor, Lynis, rkhunter, chkrootkit, debsums,
+nmap, les paquets WAF disponibles et Nginx si `NGINX_INSTALL_IF_MISSING=true`.
+
+Pour desactiver l'installation automatique des prerequis au lancement:
+
+```bash
+sudo ./harden.sh --no-install-prereqs --module ssh
+```
 
 ## Logs et rapports
 
@@ -185,6 +221,7 @@ Le projet est configure par defaut pour des serveurs Nginx uniquement:
 ```bash
 NGINX_ONLY=true
 APACHE_ENABLED=false
+NGINX_INSTALL_IF_MISSING=true
 ```
 
 Le module Apache reste present comme option de base de code, mais il est exclu

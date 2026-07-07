@@ -6,9 +6,23 @@ run_nginx_hardening() {
   report_add_module "nginx"
 
   if ! command_exists nginx && [[ ! -d /etc/nginx ]]; then
-    log_warn "Nginx is not installed; skipping Nginx hardening"
-    report_add_recommendation "Install Nginx before running the Nginx hardening module."
-    return 0
+    if [[ "${NGINX_INSTALL_IF_MISSING:-true}" == "true" ]]; then
+      log_warn "Nginx is not installed; installing Nginx because NGINX_INSTALL_IF_MISSING=true"
+      if ((${#NGINX_TOOL_PACKAGES[@]} > 0)); then
+        install_available_packages "${NGINX_TOOL_PACKAGES[@]}"
+      else
+        install_available_packages nginx
+      fi
+      if [[ "${DRY_RUN:-false}" != "true" ]] && ! command_exists nginx && [[ ! -d /etc/nginx ]]; then
+        log_error "Nginx installation did not make nginx available; skipping Nginx hardening"
+        report_add_recommendation "Nginx hardening was skipped because nginx could not be installed or detected."
+        return 1
+      fi
+    else
+      log_warn "Nginx is not installed; skipping Nginx hardening"
+      report_add_recommendation "Install Nginx before running the Nginx hardening module, or set NGINX_INSTALL_IF_MISSING=true."
+      return 0
+    fi
   fi
 
   local headers_snippet hardening_snippet global_conf tmp_headers tmp_hardening tmp_global

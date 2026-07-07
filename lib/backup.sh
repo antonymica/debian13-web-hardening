@@ -65,7 +65,7 @@ initial_config_backup() {
     log_info "[dry-run] initial backup would be created under ${INITIAL_BACKUP_DIR}"
     log_info "[dry-run] dry-run mode does not create /var/backups entries"
     local path
-    for path in "${INITIAL_BACKUP_PATHS[@]:-}"; do
+    for path in "${INITIAL_BACKUP_PATHS[@]+"${INITIAL_BACKUP_PATHS[@]}"}"; do
       [[ -n "$path" ]] && log_info "[dry-run] initial backup would include ${path}"
     done
     return 0
@@ -77,7 +77,7 @@ initial_config_backup() {
   chmod 0600 "$INITIAL_BACKUP_MANIFEST"
 
   local path rel dest dest_parent
-  for path in "${INITIAL_BACKUP_PATHS[@]:-}"; do
+  for path in "${INITIAL_BACKUP_PATHS[@]+"${INITIAL_BACKUP_PATHS[@]}"}"; do
     [[ -n "$path" ]] || continue
     if [[ "$path" != /* ]]; then
       log_warn "Skipping non-absolute initial backup path: ${path}"

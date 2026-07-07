@@ -23,6 +23,9 @@ DRY_RUN="false"
 ASSUME_YES="false"
 DEBUG="false"
 RUN_INITIAL_BACKUP="true"
+ACTION_EXPLICIT="false"
+CLI_INSTALL_SECURITY_TOOLS="false"
+CLI_NO_INSTALL_PREREQS="false"
 
 FIREWALL_EXTRA_TCP_PORTS=()
 FIREWALL_EXTRA_UDP_PORTS=()
@@ -42,6 +45,8 @@ Usage:
   sudo ./harden.sh --profile strict
   sudo ./harden.sh --dry-run
   sudo ./harden.sh --yes
+  sudo ./harden.sh --install-tools
+  sudo ./harden.sh --no-install-prereqs
   sudo ./harden.sh --initial-backup-only
   sudo ./harden.sh --no-initial-backup
   sudo ./harden.sh --doctor
@@ -56,6 +61,8 @@ Options:
   --profile <name>        Use conservative, balanced, or strict profile
   --dry-run               Show actions without applying changes
   --yes                   Auto-confirm prompts
+  --install-tools         Install recommended security tooling
+  --no-install-prereqs    Skip startup prerequisite installation
   --initial-backup-only   Create the initial configuration backup and exit
   --no-initial-backup     Skip initial baseline backup for this run
   --doctor                Run local diagnostics without changing the system
@@ -75,10 +82,12 @@ parse_args() {
     case "$1" in
       --menu)
         ACTION="menu"
+        ACTION_EXPLICIT="true"
         shift
         ;;
       --all)
         ACTION="all"
+        ACTION_EXPLICIT="true"
         shift
         ;;
       --module)
@@ -87,6 +96,7 @@ parse_args() {
           exit 2
         fi
         ACTION="module"
+        ACTION_EXPLICIT="true"
         SELECTED_MODULE="$2"
         shift 2
         ;;
@@ -106,8 +116,20 @@ parse_args() {
         ASSUME_YES="true"
         shift
         ;;
+      --install-tools)
+        CLI_INSTALL_SECURITY_TOOLS="true"
+        if [[ "$ACTION_EXPLICIT" != "true" ]]; then
+          ACTION="install-tools"
+        fi
+        shift
+        ;;
+      --no-install-prereqs)
+        CLI_NO_INSTALL_PREREQS="true"
+        shift
+        ;;
       --initial-backup-only)
         ACTION="initial-backup-only"
+        ACTION_EXPLICIT="true"
         shift
         ;;
       --no-initial-backup)
@@ -116,14 +138,17 @@ parse_args() {
         ;;
       --doctor)
         ACTION="doctor"
+        ACTION_EXPLICIT="true"
         shift
         ;;
       --rollback)
         ACTION="rollback"
+        ACTION_EXPLICIT="true"
         shift
         ;;
       --report-only)
         ACTION="report-only"
+        ACTION_EXPLICIT="true"
         shift
         ;;
       --debug)
@@ -177,6 +202,13 @@ load_configuration() {
   fi
   # shellcheck source=config/profiles/balanced.conf
   source "$profile_file"
+
+  if [[ "$CLI_INSTALL_SECURITY_TOOLS" == "true" ]]; then
+    INSTALL_SECURITY_TOOLS_ON_START="true"
+  fi
+  if [[ "$CLI_NO_INSTALL_PREREQS" == "true" ]]; then
+    AUTO_INSTALL_PREREQUISITES="false"
+  fi
 }
 
 load_modules() {
@@ -214,6 +246,9 @@ run_doctor() {
   doctor_check "modules directory is readable" test -d "$MODULE_DIR"
   doctor_check "main is called at end of harden.sh" grep -q '^main "\$@"$' "${SCRIPT_DIR}/harden.sh"
   doctor_check "bash syntax is valid" bash -n "${SCRIPT_DIR}/harden.sh"
+  doctor_check "apt-get is available" command -v apt-get
+  doctor_check "apt-cache is available" command -v apt-cache
+  doctor_check "dpkg-query is available" command -v dpkg-query
 
   printf '\nExpected runtime paths:\n'
   printf -- '- Logs: %s\n' "${LOG_DIR:-/var/log/debian13-hardening}"
@@ -299,8 +334,9 @@ Debian 13 Web Server Hardening
 9) Auditd and security logs
 10) AppArmor hardening
 11) Malware/rootkit/security scanner tools
-12) Run all recommended hardening modules
-13) Generate security report only
+12) Install/verify required security tools
+13) Run all recommended hardening modules
+14) Generate security report only
 0) Exit
 EOF
     read -r -p "Select an option: " choice
@@ -316,8 +352,9 @@ EOF
       9) run_module auditd ;;
       10) run_module apparmor ;;
       11) run_module scanners ;;
-      12) run_all_recommended; break ;;
-      13) log_info "Report-only selected"; break ;;
+      12) install_security_tools_bundle ;;
+      13) run_all_recommended; break ;;
+      14) log_info "Report-only selected"; break ;;
       0) log_info "Exit selected"; break ;;
       *) log_warn "Invalid menu option: ${choice}" ;;
     esac
@@ -345,19 +382,30 @@ main() {
   log_info "Dry run: ${DRY_RUN}"
   log_info "Assume yes: ${ASSUME_YES}"
   log_info "Nginx-only mode: ${NGINX_ONLY:-true}"
+  log_info "Auto-install prerequisites: ${AUTO_INSTALL_PREREQUISITES:-true}"
+  log_info "Install security tools: ${INSTALL_SECURITY_TOOLS_ON_START:-false}"
   require_debian_13_or_warn
-  warn_gcp_if_detected
 
   load_modules
 
   case "$ACTION" in
-    menu|all|module|initial-backup-only)
+    menu|all|module|install-tools|initial-backup-only)
       if [[ "$RUN_INITIAL_BACKUP" == "true" ]]; then
         initial_config_backup
       else
         log_warn "Initial configuration backup skipped by --no-initial-backup"
         report_add_recommendation "Initial configuration backup was skipped by --no-initial-backup."
       fi
+      ;;
+  esac
+
+  case "$ACTION" in
+    menu|all|module|install-tools)
+      install_launch_prerequisites
+      if [[ "${INSTALL_SECURITY_TOOLS_ON_START:-false}" == "true" ]]; then
+        install_security_tools_bundle
+      fi
+      warn_gcp_if_detected
       ;;
   esac
 
@@ -373,6 +421,9 @@ main() {
       ;;
     rollback)
       rollback_interactive
+      ;;
+    install-tools)
+      log_info "Security tool installation only selected"
       ;;
     initial-backup-only)
       log_info "Initial backup only selected"

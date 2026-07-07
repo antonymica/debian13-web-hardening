@@ -21,8 +21,13 @@ _report_add_unique() {
   local array_name="$1"
   local value="$2"
   local current
-  eval "for current in \"\${${array_name}[@]:-}\"; do [[ \"\$current\" == \"\$value\" ]] && return 0; done"
-  eval "${array_name}+=(\"\$value\")"
+  local -n report_array="$array_name"
+  for current in "${report_array[@]+"${report_array[@]}"}"; do
+    if [[ "$current" == "$value" ]]; then
+      return 0
+    fi
+  done
+  report_array+=("$value")
 }
 
 report_add_module() {
@@ -55,13 +60,19 @@ report_add_rollback_command() {
 
 _markdown_list() {
   local item
+  local wrote="false"
   if (($# == 0)); then
     printf -- '- None recorded\n'
     return 0
   fi
   for item in "$@"; do
+    [[ -n "$item" ]] || continue
     printf -- '- %s\n' "$item"
+    wrote="true"
   done
+  if [[ "$wrote" != "true" ]]; then
+    printf -- '- None recorded\n'
+  fi
 }
 
 generate_report() {
@@ -82,22 +93,21 @@ generate_report() {
     printf '- Backup directory: %s\n\n' "${BACKUP_DIR:-Not initialized}"
 
     printf '## Modules executed\n\n'
-    _markdown_list "${REPORT_MODULES[@]:-}"
+    _markdown_list "${REPORT_MODULES[@]+"${REPORT_MODULES[@]}"}"
     printf '\n## Files modified\n\n'
-    _markdown_list "${REPORT_MODIFIED_FILES[@]:-}"
+    _markdown_list "${REPORT_MODIFIED_FILES[@]+"${REPORT_MODIFIED_FILES[@]}"}"
     printf '\n## Backups created\n\n'
-    _markdown_list "${REPORT_BACKUPS[@]:-}"
+    _markdown_list "${REPORT_BACKUPS[@]+"${REPORT_BACKUPS[@]}"}"
     printf '\n## Firewall rules applied\n\n'
-    _markdown_list "${REPORT_FIREWALL_RULES[@]:-}"
+    _markdown_list "${REPORT_FIREWALL_RULES[@]+"${REPORT_FIREWALL_RULES[@]}"}"
     printf '\n## Services disabled\n\n'
-    _markdown_list "${REPORT_DISABLED_SERVICES[@]:-}"
+    _markdown_list "${REPORT_DISABLED_SERVICES[@]+"${REPORT_DISABLED_SERVICES[@]}"}"
     printf '\n## Remaining recommendations\n\n'
-    _markdown_list "${REPORT_RECOMMENDATIONS[@]:-}"
+    _markdown_list "${REPORT_RECOMMENDATIONS[@]+"${REPORT_RECOMMENDATIONS[@]}"}"
     printf '\n## Rollback commands\n\n'
-    _markdown_list "${REPORT_ROLLBACK_COMMANDS[@]:-}"
+    _markdown_list "${REPORT_ROLLBACK_COMMANDS[@]+"${REPORT_ROLLBACK_COMMANDS[@]}"}"
   } > "$REPORT_FILE"
 
   chmod 0640 "$REPORT_FILE"
   log_success "Security report written to ${REPORT_FILE}"
 }
-

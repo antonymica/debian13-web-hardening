@@ -4,7 +4,7 @@ set -Eeuo pipefail
 _is_protected_service() {
   local svc="$1"
   local protected
-  for protected in "${SERVICE_PROTECTED[@]:-}"; do
+  for protected in "${SERVICE_PROTECTED[@]+"${SERVICE_PROTECTED[@]}"}"; do
     [[ "$svc" == "$protected" ]] && return 0
   done
   return 1
@@ -23,7 +23,7 @@ run_services_hardening() {
     log_warn "GCP detected: Google guest agents will not be disabled"
   fi
 
-  for svc in "${SERVICE_DISABLE_CANDIDATES[@]:-}"; do
+  for svc in "${SERVICE_DISABLE_CANDIDATES[@]+"${SERVICE_DISABLE_CANDIDATES[@]}"}"; do
     [[ -n "$svc" ]] || continue
     if _is_protected_service "$svc"; then
       log_info "Skipping protected service: ${svc}"
@@ -51,4 +51,3 @@ run_services_hardening() {
     fi
   done
 }
-

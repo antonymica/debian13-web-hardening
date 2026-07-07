@@ -17,10 +17,10 @@ run_firewall_hardening() {
   tcp_ports=()
   udp_ports=()
 
-  for port in "${FIREWALL_EXTRA_TCP_PORTS[@]:-}"; do
+  for port in "${FIREWALL_EXTRA_TCP_PORTS[@]+"${FIREWALL_EXTRA_TCP_PORTS[@]}"}"; do
     [[ -n "$port" ]] && tcp_ports+=("$port")
   done
-  for port in "${FIREWALL_EXTRA_UDP_PORTS[@]:-}"; do
+  for port in "${FIREWALL_EXTRA_UDP_PORTS[@]+"${FIREWALL_EXTRA_UDP_PORTS[@]}"}"; do
     [[ -n "$port" ]] && udp_ports+=("$port")
   done
 
@@ -84,4 +84,3 @@ run_firewall_hardening() {
   report_add_firewall_rule "Allow all outbound traffic, including GCP metadata access to 169.254.169.254"
   rm -f "$tmp"
 }
-

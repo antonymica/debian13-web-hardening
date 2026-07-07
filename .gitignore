@@ -1,0 +1,15 @@
+# Logs and local runtime output
+*.log
+reports/
+
+# Editor and OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Test artifacts
+shellcheck.log
+

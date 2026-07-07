@@ -158,8 +158,35 @@ par defaut:
 /var/www/html/hardening.html
 ```
 
-Elle est remplacee a chaque execution et peut etre consultee depuis le serveur
-web si le vhost Nginx sert bien `/var/www/html`.
+Sur un serveur public, elle est donc accessible par exemple ici:
+
+```text
+http://34.35.139.138/hardening.html
+```
+
+Cette page fonctionne comme un tableau de bord live. Elle lit
+automatiquement le fichier suivant:
+
+```text
+/var/www/html/hardening-status.json
+```
+
+Pendant l'execution de `harden.sh`, chaque nouvelle ligne de log et chaque
+changement d'etat important met a jour ce JSON. La page `hardening.html`
+interroge ce fichier toutes les quelques secondes sans rechargement complet.
+Elle affiche aussi l'historique des rapports Markdown trouves dans
+`/var/log/debian13-hardening/reports`.
+
+Parametres utiles dans `config/hardening.conf`:
+
+```bash
+WEB_REPORT_ENABLED=true
+WEB_REPORT_FILE="/var/www/html/hardening.html"
+WEB_REPORT_JSON_FILE="/var/www/html/hardening-status.json"
+WEB_REPORT_REFRESH_SECONDS=5
+WEB_REPORT_LOG_LINES=120
+WEB_REPORT_LIVE_ENABLED=true
+```
 
 Le rapport contient l'hote, la version Debian, le provider cloud detecte, les
 modules executes, les fichiers modifies, les backups, les regles firewall, les

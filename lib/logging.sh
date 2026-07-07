@@ -27,6 +27,10 @@ _log_line() {
   local line="[${ts}] [${level}] ${message}"
   printf '%s%s%s\n' "$color" "$line" "${COLOR_RESET:-}"
   printf '%s\n' "$line" >> "$LOG_FILE"
+  if [[ "${WEB_REPORT_LIVE_ENABLED:-true}" == "true" && "${PUBLISHING_WEB_STATUS:-false}" != "true" ]] \
+    && declare -F publish_web_status >/dev/null 2>&1; then
+    publish_web_status "$level" "$message" "${WEB_REPORT_RUNNING:-true}" || true
+  fi
 }
 
 log_info() {
@@ -63,4 +67,3 @@ log_section() {
 log_backup() {
   _log_line "BACKUP" "${COLOR_CYAN:-}" "$@"
 }
-

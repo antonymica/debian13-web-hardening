@@ -17,7 +17,7 @@ run_waf_hardening() {
 
   apache_present="false"
   nginx_present="false"
-  if command_exists apachectl || [[ -d /etc/apache2 ]]; then
+  if [[ "${APACHE_ENABLED:-false}" == "true" ]] && { command_exists apachectl || [[ -d /etc/apache2 ]]; }; then
     apache_present="true"
   fi
   if command_exists nginx || [[ -d /etc/nginx ]]; then
@@ -26,7 +26,7 @@ run_waf_hardening() {
 
   if [[ "$apache_present" == "false" && "$nginx_present" == "false" ]]; then
     log_warn "No supported web server detected for WAF configuration"
-    report_add_recommendation "Install Apache or Nginx before enabling ModSecurity/OWASP CRS."
+    report_add_recommendation "Install Nginx before enabling ModSecurity/OWASP CRS, or set APACHE_ENABLED=true if this server intentionally uses Apache."
     return 0
   fi
 

@@ -14,6 +14,7 @@ PROFILE="balanced"
 DRY_RUN="false"
 ASSUME_YES="false"
 DEBUG="false"
+RUN_INITIAL_BACKUP="true"
 
 FIREWALL_EXTRA_TCP_PORTS=()
 FIREWALL_EXTRA_UDP_PORTS=()
@@ -33,6 +34,8 @@ Usage:
   sudo ./harden.sh --profile strict
   sudo ./harden.sh --dry-run
   sudo ./harden.sh --yes
+  sudo ./harden.sh --initial-backup-only
+  sudo ./harden.sh --no-initial-backup
   sudo ./harden.sh --rollback
   sudo ./harden.sh --report-only
   sudo ./harden.sh --help
@@ -44,13 +47,16 @@ Options:
   --profile <name>        Use conservative, balanced, or strict profile
   --dry-run               Show actions without applying changes
   --yes                   Auto-confirm prompts
+  --initial-backup-only   Create the initial configuration backup and exit
+  --no-initial-backup     Skip initial baseline backup for this run
   --rollback              Restore files from a previous backup
   --report-only           Generate report only
   --debug                 Enable debug logs
   --help                  Show this help
 
 Modules:
-  ssh firewall fail2ban kernel services updates nginx apache waf auditd apparmor scanners
+  ssh firewall fail2ban kernel services updates nginx waf auditd apparmor scanners
+  apache is optional and disabled by default. Set APACHE_ENABLED=true to use it.
 EOF
 }
 
@@ -88,6 +94,14 @@ parse_args() {
         ;;
       --yes)
         ASSUME_YES="true"
+        shift
+        ;;
+      --initial-backup-only)
+        ACTION="initial-backup-only"
+        shift
+        ;;
+      --no-initial-backup)
+        RUN_INITIAL_BACKUP="false"
         shift
         ;;
       --rollback)
@@ -184,7 +198,12 @@ run_module() {
       run_nginx_hardening
       ;;
     apache)
-      run_apache_hardening
+      if [[ "${APACHE_ENABLED:-false}" == "true" ]]; then
+        run_apache_hardening
+      else
+        log_warn "Apache module is disabled. Set APACHE_ENABLED=true in config/hardening.conf to enable it."
+        report_add_recommendation "Apache hardening was skipped because this project is configured for Nginx-only servers."
+      fi
       ;;
     waf)
       run_waf_hardening
@@ -207,7 +226,7 @@ run_module() {
 
 run_all_recommended() {
   local module
-  for module in ssh firewall fail2ban kernel updates services nginx apache waf auditd apparmor scanners; do
+  for module in ssh firewall fail2ban kernel updates services nginx waf auditd apparmor scanners; do
     run_module "$module"
   done
 }
@@ -226,13 +245,12 @@ Debian 13 Web Server Hardening
 5) Disable unnecessary services
 6) System updates and unattended upgrades
 7) Web server hardening: Nginx
-8) Web server hardening: Apache
-9) WAF: ModSecurity + OWASP CRS
-10) Auditd and security logs
-11) AppArmor hardening
-12) Malware/rootkit/security scanner tools
-13) Run all recommended hardening modules
-14) Generate security report only
+8) WAF: ModSecurity + OWASP CRS
+9) Auditd and security logs
+10) AppArmor hardening
+11) Malware/rootkit/security scanner tools
+12) Run all recommended hardening modules
+13) Generate security report only
 0) Exit
 EOF
     read -r -p "Select an option: " choice
@@ -244,13 +262,12 @@ EOF
       5) run_module services ;;
       6) run_module updates ;;
       7) run_module nginx ;;
-      8) run_module apache ;;
-      9) run_module waf ;;
-      10) run_module auditd ;;
-      11) run_module apparmor ;;
-      12) run_module scanners ;;
-      13) run_all_recommended; break ;;
-      14) log_info "Report-only selected"; break ;;
+      8) run_module waf ;;
+      9) run_module auditd ;;
+      10) run_module apparmor ;;
+      11) run_module scanners ;;
+      12) run_all_recommended; break ;;
+      13) log_info "Report-only selected"; break ;;
       0) log_info "Exit selected"; break ;;
       *) log_warn "Invalid menu option: ${choice}" ;;
     esac
@@ -272,10 +289,22 @@ main() {
   log_info "Profile: ${PROFILE}"
   log_info "Dry run: ${DRY_RUN}"
   log_info "Assume yes: ${ASSUME_YES}"
+  log_info "Nginx-only mode: ${NGINX_ONLY:-true}"
   require_debian_13_or_warn
   warn_gcp_if_detected
 
   load_modules
+
+  case "$ACTION" in
+    menu|all|module|initial-backup-only)
+      if [[ "$RUN_INITIAL_BACKUP" == "true" ]]; then
+        initial_config_backup
+      else
+        log_warn "Initial configuration backup skipped by --no-initial-backup"
+        report_add_recommendation "Initial configuration backup was skipped by --no-initial-backup."
+      fi
+      ;;
+  esac
 
   case "$ACTION" in
     menu)
@@ -290,6 +319,9 @@ main() {
     rollback)
       rollback_interactive
       ;;
+    initial-backup-only)
+      log_info "Initial backup only selected"
+      ;;
     report-only)
       log_info "Generating report only"
       ;;
@@ -303,4 +335,3 @@ main() {
 }
 
 main "$@"
-

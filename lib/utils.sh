@@ -33,7 +33,7 @@ ensure_dir() {
   local dir="$1"
   local mode="${2:-0755}"
   if [[ "${DRY_RUN:-false}" == "true" ]]; then
-    log_info "[dry-run] mkdir -p ${dir}"
+    log_info "[dry-run] would create directory ${dir} with mode ${mode}; no directory is created in dry-run mode"
     return 0
   fi
   mkdir -p "$dir"

@@ -34,11 +34,11 @@ run_fail2ban_hardening() {
     elif [[ -d /etc/nginx ]]; then
       report_add_recommendation "Nginx detected, but /var/log/nginx/error.log was not found; enable nginx-http-auth jail after logs exist."
     fi
-    if [[ -d /etc/apache2 && -f /var/log/apache2/error.log ]]; then
+    if [[ "${APACHE_ENABLED:-false}" == "true" && -d /etc/apache2 && -f /var/log/apache2/error.log ]]; then
       printf '[apache-auth]\n'
       printf 'enabled = true\n'
       printf 'logpath = /var/log/apache2/error.log\n\n'
-    elif [[ -d /etc/apache2 ]]; then
+    elif [[ "${APACHE_ENABLED:-false}" == "true" && -d /etc/apache2 ]]; then
       report_add_recommendation "Apache detected, but /var/log/apache2/error.log was not found; enable apache-auth jail after logs exist."
     fi
   } > "$tmp"

@@ -49,8 +49,38 @@ rollback_interactive() {
     return 0
   fi
 
-  while IFS='|' read -r original backup; do
+  local entries=()
+  local line index
+  while IFS= read -r line; do
+    [[ -n "$line" ]] && entries+=("$line")
+  done < "$manifest"
+
+  for ((index = ${#entries[@]} - 1; index >= 0; index--)); do
+    IFS='|' read -r original backup <<< "${entries[$index]}"
     [[ -n "$original" && -n "$backup" ]] || continue
+    if [[ "$backup" == "${MISSING_BACKUP_MARKER:-__DEBIAN13_HARDENING_MISSING__}" ]]; then
+      if [[ ! -e "$original" ]]; then
+        log_info "Path still absent, nothing to remove: ${original}"
+        continue
+      fi
+      if [[ "${DRY_RUN:-false}" == "true" ]]; then
+        log_info "[dry-run] remove path created after backup: ${original}"
+        continue
+      fi
+      if [[ -f "$original" || -L "$original" ]]; then
+        rm -f "$original"
+        log_success "Removed file created after backup: ${original}"
+      elif [[ -d "$original" ]]; then
+        if rmdir "$original" 2>/dev/null; then
+          log_success "Removed empty directory created after backup: ${original}"
+        else
+          log_warn "Directory was absent during backup but is not empty now; leaving in place: ${original}"
+        fi
+      else
+        log_warn "Path was absent during backup but is an unsupported type now; leaving in place: ${original}"
+      fi
+      continue
+    fi
     if [[ ! -e "$backup" ]]; then
       log_warn "Backup missing: ${backup}"
       continue
@@ -59,12 +89,18 @@ rollback_interactive() {
       log_info "[dry-run] restore ${backup} -> ${original}"
       continue
     fi
-    mkdir -p "$(dirname "$original")"
-    cp -a "$backup" "$original"
+    if [[ -d "$backup" && ! -L "$backup" ]]; then
+      mkdir -p "$original"
+      cp -a "${backup}/." "${original}/"
+      chown --reference="$backup" "$original" 2>/dev/null || true
+      chmod --reference="$backup" "$original" 2>/dev/null || true
+    else
+      mkdir -p "$(dirname "$original")"
+      cp -a "$backup" "$original"
+    fi
     log_success "Restored ${original}"
-  done < "$manifest"
+  done
 
   report_add_module "rollback"
   report_add_recommendation "After rollback, validate affected services and reload them manually if needed."
 }
-

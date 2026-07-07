@@ -11,12 +11,15 @@ avant reload, et garde-fous anti-lockout SSH.
 ## Avertissement securite
 
 Executer ce projet sur un serveur de production peut modifier SSH, nftables,
-Fail2ban, sysctl, auditd, AppArmor, Nginx, Apache et les mises a jour
+Fail2ban, sysctl, auditd, AppArmor, Nginx et les mises a jour
 automatiques. Testez d'abord en environnement de preproduction ou lancez:
 
 ```bash
 sudo ./harden.sh --dry-run
 ```
+
+En mode `--dry-run`, aucun backup n'est cree dans `/var/backups`; le script
+affiche uniquement ce qui serait fait.
 
 Pour SSH, gardez toujours une session ouverte et testez une seconde connexion
 avant de fermer votre terminal courant.
@@ -52,6 +55,8 @@ sudo ./harden.sh --profile balanced
 sudo ./harden.sh --profile strict
 sudo ./harden.sh --dry-run
 sudo ./harden.sh --yes
+sudo ./harden.sh --initial-backup-only
+sudo ./harden.sh --no-initial-backup
 sudo ./harden.sh --rollback
 sudo ./harden.sh --report-only
 sudo ./harden.sh --help
@@ -67,12 +72,11 @@ sudo ./harden.sh --profile strict --all --yes
 
 - `ssh`: durcissement OpenSSH via `/etc/ssh/sshd_config.d/90-debian13-hardening.conf`.
 - `firewall`: configuration nftables avec entree refusee par defaut.
-- `fail2ban`: jail SSH systemd, avec support Nginx/Apache si presents.
+- `fail2ban`: jail SSH systemd, avec support Nginx si present.
 - `kernel`: regles sysctl reseau et kernel raisonnables.
 - `services`: proposition de desactivation de services souvent inutiles.
 - `updates`: unattended-upgrades, apt-listchanges et needrestart.
 - `nginx`: snippets et configuration globale prudente.
-- `apache`: headers, ServerTokens, protections de fichiers sensibles.
 - `waf`: ModSecurity + OWASP CRS en DetectionOnly par defaut.
 - `auditd`: surveillance des fichiers et commandes sensibles.
 - `apparmor`: installation et activation sans forcer tous les profils.
@@ -98,11 +102,23 @@ services desactives, les recommandations restantes et la commande de rollback.
 
 ## Backups et rollback
 
-Avant chaque modification, les fichiers existants sont sauvegardes dans:
+Avant le lancement des modules, un backup initial des surfaces de configuration
+gerees par le projet est cree automatiquement dans:
 
 ```text
 /var/backups/debian13-hardening/YYYYMMDD-HHMMSS/
 ```
+
+Il contient notamment les configurations SSH, nftables, Fail2ban, sysctl, APT,
+Nginx, ModSecurity, auditd, AppArmor, systemd et services par defaut. Les
+permissions originales sont conservees et le dossier de backup est cree en
+mode `0700`, car il peut contenir des elements sensibles comme les cles host
+SSH.
+
+Ensuite, avant chaque modification ciblée, le fichier concerne est sauvegarde
+dans le meme dossier de backup. Les chemins qui n'existaient pas au depart sont
+enregistres afin que le rollback puisse retirer prudemment les fichiers crees
+par le script.
 
 Pour restaurer:
 
@@ -147,6 +163,19 @@ server `169.254.169.254`, et ne desactive pas les agents Google Cloud connus.
 
 Les profils sont dans `config/profiles/`.
 
+## Nginx uniquement
+
+Le projet est configure par defaut pour des serveurs Nginx uniquement:
+
+```bash
+NGINX_ONLY=true
+APACHE_ENABLED=false
+```
+
+Le module Apache reste present comme option de base de code, mais il est exclu
+du menu et de `--all`. Pour l'utiliser explicitement, modifiez
+`config/hardening.conf` et passez `APACHE_ENABLED=true`.
+
 ## Contribution
 
 Avant une pull request:
@@ -162,4 +191,3 @@ systeme, une commande de verification ou une procedure de rollback.
 ## Licence
 
 MIT. Voir `LICENSE`.
-
